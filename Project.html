@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proc-Opt Guardian | Enterprise Simulation Suite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;900&family=Fira+Code:wght@400;700&display=swap');
+        
+        :root {
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: #020617;
+            color: #f1f5f9;
+        }
+
+        .font-mono {
+            font-family: 'Fira Code', monospace;
+        }
+
+        @keyframes scan {
+            0% { top: 0; opacity: 0.1; }
+            50% { opacity: 0.5; }
+            100% { top: 100%; opacity: 0.1; }
+        }
+
+        .animate-scan {
+            animation: scan 2s infinite;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #020617;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+    </style>
+</head>
+<body class="selection:bg-indigo-500/30 p-4 md:p-8 min-h-screen">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-6">
+            <div class="flex items-center gap-4">
+                <div class="p-2.5 bg-indigo-600 rounded-lg shadow-lg">
+                    <i data-lucide="factory" class="text-white w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black uppercase italic text-white tracking-tight">
+                        Proc-Opt <span class="text-indigo-400">Guardian</span>
+                    </h1>
+                    <p class="text-[10px] text-slate-500 font-mono uppercase tracking-[0.2em]">Enterprise Simulation Suite</p>
+                </div>
+            </div>
+            
+            <div class="flex gap-2">
+                <button onclick="checkSafety()" class="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-2 rounded-lg font-black text-xs transition-all active:scale-95 border-b-2 border-indigo-700">
+                    <i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i> AUDIT SYSTEM
+                </button>
+                <button onclick="resetAll()" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-black text-xs transition-all border-b-2 border-slate-900">
+                    <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> RESET
+                </button>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav id="main-nav" class="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 mb-8 self-start overflow-x-auto max-w-full">
+            <button onclick="switchTab('dashboard')" data-tab="dashboard" class="nav-btn active flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all bg-indigo-600 text-white shadow-lg shadow-indigo-500/20">
+                <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i> Dashboard
+            </button>
+            <button onclick="switchTab('matrix')" data-tab="matrix" class="nav-btn flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all text-slate-400 hover:text-white hover:bg-slate-800">
+                <i data-lucide="table-properties" class="w-3.5 h-3.5"></i> Allocation Matrix
+            </button>
+            <button onclick="switchTab('plant')" data-tab="plant" class="nav-btn flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all text-slate-400 hover:text-white hover:bg-slate-800">
+                <i data-lucide="cpu" class="w-3.5 h-3.5"></i> Plant Floor
+            </button>
+            <button onclick="switchTab('logs')" data-tab="logs" class="nav-btn flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all text-slate-400 hover:text-white hover:bg-slate-800">
+                <i data-lucide="history" class="w-3.5 h-3.5"></i> Telemetry Logs
+            </button>
+        </nav>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- Left Side: Dynamic Content -->
+            <div class="lg:col-span-8">
+                
+                <!-- Dashboard Tab -->
+                <div id="tab-dashboard" class="tab-content active space-y-6 transition-all duration-500">
+                    <div id="resource-cards" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Injected via JS -->
+                    </div>
+
+                    <div class="bg-slate-900/40 border border-slate-800 rounded-2xl p-8 flex flex-col items-center text-center">
+                        <i data-lucide="activity" class="text-indigo-500 mb-4 opacity-50 w-12 h-12"></i>
+                        <h2 class="text-xl font-black text-white mb-2 uppercase tracking-tight">Plant Optimization Summary</h2>
+                        <p class="text-slate-400 text-sm max-w-lg mb-6 italic font-mono">
+                            System currently monitoring <span id="summary-line-count">3</span> active production lines with <span id="summary-unit-count">30</span> distributed resource units.
+                        </p>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 w-full border-t border-slate-800 pt-8">
+                            <div class="text-center">
+                                <div id="stat-lines" class="text-2xl font-black text-white">3</div>
+                                <div class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Active Lines</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl font-black text-emerald-500">100%</div>
+                                <div class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Uptime</div>
+                            </div>
+                            <div class="text-center">
+                                <div id="stat-health" class="text-2xl font-black text-indigo-400">---</div>
+                                <div class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Health Status</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl font-black text-white">3</div>
+                                <div class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Asset Types</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Matrix Tab -->
+                <div id="tab-matrix" class="tab-content space-y-6 transition-all duration-500">
+                    <div class="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+                        <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950/30">
+                           <h3 class="font-black text-xs uppercase tracking-[0.2em] flex items-center gap-2 text-white">
+                             <i data-lucide="table-properties" class="text-indigo-400 w-4 h-4"></i>
+                             Dynamic Allocation Workspace
+                           </h3>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-950/80 text-slate-500 text-[10px] uppercase font-black tracking-widest">
+                                        <th class="px-6 py-5">Production Line</th>
+                                        <th class="px-4 py-5 text-center">In Use: Robotics</th>
+                                        <th class="px-4 py-5 text-center">In Use: Power</th>
+                                        <th class="px-4 py-5 text-center">In Use: Logic</th>
+                                        <th class="px-4 py-5 text-center">Peak: Robotics</th>
+                                        <th class="px-4 py-5 text-center">Peak: Power</th>
+                                        <th class="px-4 py-5 text-center">Peak: Logic</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="matrix-body" class="divide-y divide-slate-800">
+                                    <!-- Injected via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="p-4 bg-slate-950/50 text-[10px] text-slate-500 italic flex items-center gap-2">
+                           <i data-lucide="info" class="w-3 h-3"></i> Modifications to Peak capacity require system re-audit.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Plant Floor Tab -->
+                <div id="tab-plant" class="tab-content space-y-6 transition-all duration-500">
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-12 min-h-[500px] relative flex flex-col items-center justify-center overflow-hidden">
+                        <div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(#4f46e5 1px, transparent 1px); background-size: 30px 30px;"></div>
+                        
+                        <div class="relative z-10 w-full max-w-4xl grid grid-cols-1 md:grid-cols-3 gap-16 items-center">
+                            <div id="plant-resources" class="space-y-4">
+                                <!-- Injected via JS -->
+                            </div>
+
+                            <div class="flex flex-col items-center">
+                                <div class="w-40 h-40 rounded-full border-2 border-indigo-500/20 flex items-center justify-center relative shadow-[0_0_50px_rgba(79,70,229,0.1)]">
+                                   <div class="absolute inset-0 rounded-full animate-pulse border-2 border-indigo-500/40"></div>
+                                   <div class="text-center group cursor-pointer">
+                                      <i data-lucide="factory" class="mx-auto text-indigo-400 group-hover:scale-110 transition-transform w-12 h-12"></i>
+                                      <div class="text-[9px] font-black text-slate-500 mt-2 tracking-widest uppercase">Plant Central</div>
+                                   </div>
+                                </div>
+                            </div>
+
+                            <div id="plant-terminals" class="space-y-4">
+                                <!-- Injected via JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Tab -->
+                <div id="tab-logs" class="tab-content space-y-6 transition-all duration-500">
+                    <div class="bg-slate-900/40 border border-slate-800 rounded-2xl h-[550px] flex flex-col">
+                        <div class="p-6 border-b border-slate-800 bg-slate-950/30 flex justify-between items-center">
+                           <h3 class="font-black text-xs uppercase tracking-widest flex items-center gap-2 text-white">
+                             <i data-lucide="history" class="text-indigo-400 w-4 h-4"></i>
+                             Industrial Event Stream
+                           </h3>
+                           <div class="px-2 py-1 bg-indigo-500/10 rounded text-[10px] font-black text-indigo-400">SESSION_LIVE</div>
+                        </div>
+                        <div id="log-container" class="flex-1 overflow-y-auto p-6 font-mono text-xs space-y-4">
+                            <!-- Injected via JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Sidebar -->
+            <aside class="lg:col-span-4 space-y-6">
+                <!-- Result Card -->
+                <section id="result-card" class="p-8 rounded-2xl border-2 transition-all duration-700 shadow-2xl relative overflow-hidden bg-slate-900 border-slate-800">
+                    <div id="scanner" class="hidden absolute top-0 left-0 w-full h-[2px] bg-white opacity-20 animate-scan"></div>
+                    
+                    <h2 class="text-[10px] font-black uppercase tracking-[0.3em] mb-6 flex items-center gap-2 text-slate-400">
+                        Optimization Result
+                    </h2>
+                    
+                    <div id="result-idle" class="py-10 text-center">
+                        <i data-lucide="play" class="mx-auto text-slate-700 mb-4 opacity-50 w-10 h-10"></i>
+                        <p class="text-xs text-slate-500 font-mono uppercase italic tracking-widest">Execute system audit to analyze safety...</p>
+                    </div>
+
+                    <div id="result-safe" class="hidden space-y-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-14 h-14 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/40">
+                                <i data-lucide="check-circle-2" class="text-white w-7 h-7"></i>
+                            </div>
+                            <div>
+                                <div class="font-black text-2xl text-emerald-400 tracking-tight uppercase italic">Safe Order</div>
+                                <div class="text-[10px] text-emerald-500 font-black uppercase tracking-widest">Grid Locked Prevention Active</div>
+                            </div>
+                        </div>
+                        <div id="safe-priority-list" class="space-y-3 bg-slate-950/50 p-4 rounded-xl border border-emerald-500/20">
+                            <!-- Steps injected here -->
+                        </div>
+                    </div>
+
+                    <div id="result-blocked" class="hidden space-y-6">
+                        <div class="flex items-center gap-4 animate-pulse">
+                            <div class="w-14 h-14 bg-rose-600 rounded-full flex items-center justify-center shadow-lg shadow-rose-600/40">
+                                <i data-lucide="alert-triangle" class="text-white w-7 h-7"></i>
+                            </div>
+                            <div>
+                                <div class="font-black text-2xl text-rose-400 tracking-tight uppercase italic">Blocked</div>
+                                <div class="text-[10px] text-rose-500 font-black uppercase tracking-widest">Insecure State Reached</div>
+                            </div>
+                        </div>
+                        <div class="text-[10px] font-mono text-rose-200/70 bg-rose-950/50 p-4 rounded-xl border border-rose-500/20 leading-relaxed">
+                            CRITICAL: A request sequence has created a circular dependency. No line can proceed to peak capacity. Manual intervention in "Allocation Workspace" required.
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Info Brief -->
+                <div class="bg-indigo-700/80 rounded-2xl p-6 text-white relative overflow-hidden border border-indigo-500/50 shadow-2xl">
+                   <div class="absolute -bottom-4 -right-4 opacity-10 rotate-12">
+                      <i data-lucide="box" class="w-32 h-32"></i>
+                   </div>
+                   <h4 class="text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <i data-lucide="info" class="w-3.5 h-3.5"></i> Optimization logic
+                   </h4>
+                   <p class="text-[11px] font-medium leading-relaxed italic text-indigo-100">
+                      By simulating resource distribution through the <b>Banker's Algorithm</b>, we can guarantee that no production line enters a state from which it cannot recover. This ensures continuous throughput and zero physical gridlock in high-demand industrial environments.
+                   </p>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <script>
+        // --- State Management ---
+        let state = {
+            activeTab: 'dashboard',
+            resources: [
+                { id: 'Robotics', total: 10, available: 5, color: 'bg-blue-600', icon: 'settings', label: 'Robotic Units' },
+                { id: 'Power', total: 8, available: 7, color: 'bg-yellow-500', icon: 'zap', label: 'KV Power' },
+                { id: 'Logic', total: 12, available: 10, color: 'bg-emerald-500', icon: 'activity', label: 'Logic Controllers' },
+            ],
+            processes: [
+                { id: 'Line_A', label: 'Assembly Unit 1', allocation: { Robotics: 0, Power: 1, Logic: 0 }, max: { Robotics: 7, Power: 5, Logic: 3 } },
+                { id: 'Line_B', label: 'Chemical Reactor', allocation: { Robotics: 2, Power: 0, Logic: 0 }, max: { Robotics: 3, Power: 2, Logic: 2 } },
+                { id: 'Line_C', label: 'Packaging Hub', allocation: { Robotics: 3, Power: 0, Logic: 2 }, max: { Robotics: 9, Power: 0, Logic: 2 } }
+            ],
+            logs: [{ type: 'info', msg: 'Industrial Control System Online. Multi-page navigation active.', time: new Date().toLocaleTimeString() }],
+            safetyResult: null
+        };
+
+        // --- Core Logic: Banker's Algorithm ---
+        function checkSafety() {
+            const work = {};
+            state.resources.forEach(r => work[r.id] = r.available);
+            
+            const finish = new Array(state.processes.length).fill(false);
+            const safeSequence = [];
+            
+            let possible = true;
+            while (possible) {
+                possible = false;
+                for (let i = 0; i < state.processes.length; i++) {
+                    if (!finish[i]) {
+                        const p = state.processes[i];
+                        let canAllocate = true;
+                        
+                        for (const resId of Object.keys(work)) {
+                            const need = p.max[resId] - p.allocation[resId];
+                            if (need > work[resId]) {
+                                canAllocate = false;
+                                break;
+                            }
+                        }
+
+                        if (canAllocate) {
+                            for (const resId of Object.keys(work)) {
+                                work[resId] += p.allocation[resId];
+                            }
+                            finish[i] = true;
+                            safeSequence.push(p.id);
+                            possible = true;
+                        }
+                    }
+                }
+            }
+
+            const isSafe = finish.every(f => f === true);
+            state.safetyResult = { isSafe, sequence: safeSequence };
+            
+            if (isSafe) {
+                addLog('success', `Safety Audit Passed. Sequence: ${safeSequence.join(' → ')}`);
+            } else {
+                addLog('error', 'CRITICAL ALERT: Potential gridlock detected in plant configuration.');
+            }
+            renderResult();
+            renderDashboard();
+        }
+
+        function addLog(type, msg) {
+            state.logs.unshift({ type, msg, time: new Date().toLocaleTimeString() });
+            state.logs = state.logs.slice(0, 20);
+            renderLogs();
+        }
+
+        function updateAllocation(pIdx, resId, val) {
+            const newVal = parseInt(val) || 0;
+            const p = state.processes[pIdx];
+            const diff = newVal - p.allocation[resId];
+            
+            if (newVal > p.max[resId]) {
+                addLog('warning', `Input rejected: Allocation for ${resId} on ${p.id} exceeds reservation.`);
+                renderMatrix(); // Reset input value in UI
+                return;
+            }
+
+            const resource = state.resources.find(r => r.id === resId);
+            if (diff > resource.available) {
+                addLog('error', `Insufficient plant capacity for resource ${resId}.`);
+                renderMatrix();
+                return;
+            }
+
+            p.allocation[resId] = newVal;
+            resource.available -= diff;
+            state.safetyResult = null;
+            
+            renderDashboard();
+            renderMatrix();
+            renderResult();
+            renderPlant();
+        }
+
+        function updateMax(pIdx, resId, val) {
+            const newVal = parseInt(val) || 0;
+            state.processes[pIdx].max[resId] = newVal;
+            state.safetyResult = null;
+            renderResult();
+        }
+
+        function resetAll() {
+            state.resources.forEach(r => r.available = r.total);
+            state.processes.forEach(p => {
+                Object.keys(p.allocation).forEach(k => p.allocation[k] = 0);
+            });
+            state.safetyResult = null;
+            addLog('info', 'Manual Emergency Reset performed. All buffers cleared.');
+            renderDashboard();
+            renderMatrix();
+            renderResult();
+            renderPlant();
+        }
+
+        // --- Rendering Logic ---
+        function switchTab(tabId) {
+            state.activeTab = tabId;
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                if (btn.dataset.tab === tabId) {
+                    btn.classList.add('bg-indigo-600', 'text-white', 'shadow-lg', 'shadow-indigo-500/20');
+                    btn.classList.remove('text-slate-400', 'hover:text-white', 'hover:bg-slate-800');
+                } else {
+                    btn.classList.remove('bg-indigo-600', 'text-white', 'shadow-lg', 'shadow-indigo-500/20');
+                    btn.classList.add('text-slate-400', 'hover:text-white', 'hover:bg-slate-800');
+                }
+            });
+            
+            if(tabId === 'plant') renderPlant();
+        }
+
+        function renderDashboard() {
+            const container = document.getElementById('resource-cards');
+            container.innerHTML = state.resources.map(res => `
+                <div class="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl group transition-all hover:bg-slate-900/60">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="p-2 rounded-lg ${res.color} bg-opacity-20 text-white">
+                            <i data-lucide="${res.icon}" class="w-5 h-5"></i>
+                        </div>
+                        <span class="text-[10px] font-mono text-slate-500">LIVE_CAPACITY</span>
+                    </div>
+                    <div class="text-3xl font-black mb-1 text-white">${res.available} <span class="text-sm font-normal text-slate-500 italic">units</span></div>
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">${res.label} available</div>
+                    <div class="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div class="h-full ${res.color} transition-all duration-1000" style="width: ${(res.available/res.total)*100}%"></div>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('summary-line-count').innerText = state.processes.length;
+            document.getElementById('summary-unit-count').innerText = state.resources.reduce((a,b) => a + b.total, 0);
+            document.getElementById('stat-lines').innerText = state.processes.length;
+            document.getElementById('stat-health').innerText = state.safetyResult ? (state.safetyResult.isSafe ? 'SAFE' : 'RISK') : '---';
+            document.getElementById('stat-health').className = `text-2xl font-black ${state.safetyResult ? (state.safetyResult.isSafe ? 'text-emerald-500' : 'text-rose-500') : 'text-indigo-400'}`;
+            
+            lucide.createIcons();
+        }
+
+        function renderMatrix() {
+            const container = document.getElementById('matrix-body');
+            container.innerHTML = state.processes.map((p, pIdx) => `
+                <tr class="hover:bg-indigo-500/5 transition-colors">
+                    <td class="px-6 py-6">
+                        <div class="font-black text-indigo-400 text-sm tracking-tight">${p.id}</div>
+                        <div class="text-[10px] text-slate-500 font-mono italic">${p.label}</div>
+                    </td>
+                    ${state.resources.map(r => `
+                        <td class="px-4 py-2 text-center">
+                            <input 
+                                type="number" 
+                                value="${p.allocation[r.id]}"
+                                onchange="updateAllocation(${pIdx}, '${r.id}', this.value)"
+                                class="w-16 bg-slate-950/80 text-white text-center border border-slate-700 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-sm transition-all shadow-inner"
+                            />
+                        </td>
+                    `).join('')}
+                    ${state.resources.map(r => `
+                        <td class="px-4 py-2 text-center">
+                            <input 
+                                type="number" 
+                                value="${p.max[r.id]}"
+                                onchange="updateMax(${pIdx}, '${r.id}', this.value)"
+                                class="w-16 bg-transparent text-slate-500 text-center border border-slate-800 rounded-lg p-2.5 text-xs font-mono"
+                            />
+                        </td>
+                    `).join('')}
+                </tr>
+            `).join('');
+        }
+
+        function renderPlant() {
+            document.getElementById('plant-resources').innerHTML = `
+                <h4 class="text-[10px] font-black uppercase text-indigo-500 tracking-[0.3em] mb-4">Resource Nodes</h4>
+                ${state.resources.map(r => `
+                    <div class="flex items-center gap-4 bg-slate-900/80 p-3 rounded-xl border border-slate-800 shadow-xl">
+                        <div class="${r.color} w-10 h-10 rounded-lg flex items-center justify-center text-white">
+                            <i data-lucide="${r.icon}" class="w-[18px] h-[18px]"></i>
+                        </div>
+                        <div class="font-mono text-[10px] leading-tight text-slate-400">
+                            <div class="font-black text-white uppercase">${r.id}</div>
+                            <div>POOL: ${r.total}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+
+            document.getElementById('plant-terminals').innerHTML = `
+                <h4 class="text-[10px] font-black uppercase text-indigo-500 tracking-[0.3em] mb-4 text-right">Production Terminals</h4>
+                ${state.processes.map(p => `
+                    <div class="flex flex-row-reverse items-center gap-4 bg-slate-800/40 p-3 rounded-xl border border-slate-700 hover:border-indigo-500 transition-colors shadow-xl group">
+                        <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-indigo-400 border border-slate-600">
+                            <i data-lucide="box" class="w-[18px] h-[18px]"></i>
+                        </div>
+                        <div class="font-mono text-[10px] leading-tight text-right text-slate-400">
+                            <div class="font-black text-white">${p.id}</div>
+                            <div>${p.label.split(' ')[0]}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+            lucide.createIcons();
+        }
+
+        function renderLogs() {
+            const container = document.getElementById('log-container');
+            container.innerHTML = state.logs.map(log => `
+                <div class="flex gap-4 p-3 rounded-lg border ${
+                    log.type === 'error' ? 'bg-rose-500/5 border-rose-500/20 text-rose-300' :
+                    log.type === 'success' ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300' :
+                    log.type === 'warning' ? 'bg-amber-500/5 border-amber-500/20 text-amber-300' :
+                    'bg-slate-800/20 border-slate-700 text-slate-400'
+                }">
+                    <span class="opacity-40 shrink-0 font-mono">[${log.time}]</span>
+                    <span class="font-medium tracking-tight uppercase tracking-tighter font-mono">&gt; ${log.msg}</span>
+                </div>
+            `).join('');
+        }
+
+        function renderResult() {
+            const card = document.getElementById('result-card');
+            const idle = document.getElementById('result-idle');
+            const safe = document.getElementById('result-safe');
+            const blocked = document.getElementById('result-blocked');
+            const scanner = document.getElementById('scanner');
+
+            idle.classList.add('hidden');
+            safe.classList.add('hidden');
+            blocked.classList.add('hidden');
+            scanner.classList.add('hidden');
+            card.className = "p-8 rounded-2xl border-2 transition-all duration-700 shadow-2xl relative overflow-hidden bg-slate-900 border-slate-800";
+
+            if (!state.safetyResult) {
+                idle.classList.remove('hidden');
+            } else if (state.safetyResult.isSafe) {
+                safe.classList.remove('hidden');
+                scanner.classList.remove('hidden');
+                card.className = "p-8 rounded-2xl border-2 transition-all duration-700 shadow-2xl relative overflow-hidden bg-emerald-950/30 border-emerald-500 shadow-emerald-500/5";
+                
+                document.getElementById('safe-priority-list').innerHTML = `
+                    <p class="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-3">Execution Priority</p>
+                    ${state.safetyResult.sequence.map((step, i) => `
+                        <div class="flex items-center gap-4 mb-3 last:mb-0">
+                            <div class="w-5 h-5 bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-[9px] font-bold flex items-center justify-center rounded">0${i+1}</div>
+                            <div class="text-xs font-black text-white tracking-widest uppercase">${step}</div>
+                            ${i < state.safetyResult.sequence.length - 1 ? '<i data-lucide="chevron-right" class="text-emerald-900 ml-auto w-3.5 h-3.5"></i>' : ''}
+                        </div>
+                    `).join('')}
+                `;
+            } else {
+                blocked.classList.remove('hidden');
+                scanner.classList.remove('hidden');
+                card.className = "p-8 rounded-2xl border-2 transition-all duration-700 shadow-2xl relative overflow-hidden bg-rose-950/30 border-rose-500 shadow-rose-500/5";
+            }
+            lucide.createIcons();
+        }
+
+        // --- Initialization ---
+        window.onload = () => {
+            renderDashboard();
+            renderMatrix();
+            renderLogs();
+            lucide.createIcons();
+        };
+    </script>
+</body>
+</html>
