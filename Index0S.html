@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MemGuard: System Memory Profiler</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f1f5f9;
+            overflow-x: hidden;
+        }
+
+        .mono { font-family: 'JetBrains+Mono', monospace; }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .pulse-red {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+
+        .tab-content { display: none; transition: opacity 0.3s ease; }
+        .tab-content.active { display: block; animation: fadeIn 0.4s ease; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .memory-cell {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 2px;
+            transition: all 0.2s;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Navigation Header -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight text-blue-400">MemGuard <span class="text-slate-500 font-light text-xl">v3.0</span></h1>
+                <nav class="flex gap-6 mt-4">
+                    <button onclick="switchTab('dashboard')" class="tab-btn active text-sm font-bold border-b-2 border-blue-500 pb-1 transition-all" id="btn-dashboard">DASHBOARD</button>
+                    <button onclick="switchTab('memory-map')" class="tab-btn text-sm font-bold text-slate-500 border-b-2 border-transparent pb-1 hover:text-slate-300 transition-all" id="btn-memory-map">MEMORY MAP</button>
+                    <button onclick="switchTab('reports')" class="tab-btn text-sm font-bold text-slate-500 border-b-2 border-transparent pb-1 hover:text-slate-300 transition-all" id="btn-reports">OS REPORTS</button>
+                </nav>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="toggleMonitoring()" id="monitorBtn" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl font-semibold transition-all flex items-center gap-2 text-sm">
+                    <span id="statusIcon" class="w-2 h-2 rounded-full bg-green-400"></span>
+                    <span id="btnText">Pause Monitoring</span>
+                </button>
+                <button onclick="resetData()" class="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl font-semibold border border-slate-700 transition-all text-sm text-slate-300">
+                    Reset Session
+                </button>
+            </div>
+        </header>
+
+        <!-- TAB 1: DASHBOARD -->
+        <div id="tab-dashboard" class="tab-content active">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <!-- Left Sidebar: Controls -->
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="glass-panel p-6 rounded-3xl">
+                        <h3 class="font-bold mb-4 text-blue-400 text-sm flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2" stroke-linecap="round"/></svg>
+                            SPAWN PROCESS
+                        </h3>
+                        <div class="space-y-3">
+                            <input id="newProcName" type="text" placeholder="Process Name" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-blue-500 outline-none">
+                            <div class="grid grid-cols-2 gap-2">
+                                <input id="newProcRSS" type="number" placeholder="RSS MB" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-blue-500 outline-none">
+                                <select id="newProcLeak" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-2 py-2 text-sm focus:border-blue-500 outline-none text-slate-400">
+                                    <option value="false">Stable</option>
+                                    <option value="true">Leak Sim</option>
+                                </select>
+                            </div>
+                            <button onclick="addNewProcess()" class="w-full py-2 bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-600/30 rounded-xl font-bold transition-all text-xs">DEPLOY</button>
+                        </div>
+                    </div>
+                    <!-- Mini Stats -->
+                    <div class="glass-panel p-6 rounded-3xl">
+                        <p class="text-[10px] text-slate-500 font-bold uppercase mb-4">Kernel Context</p>
+                        <div class="space-y-4">
+                            <div class="flex justify-between"><span class="text-xs text-slate-400">Allocated</span><span id="totalPaging" class="mono text-blue-400 text-xs">0.0 GB</span></div>
+                            <div class="flex justify-between"><span class="text-xs text-slate-400">Faults/sec</span><span class="mono text-amber-400 text-xs">24</span></div>
+                            <div class="flex justify-between"><span class="text-xs text-slate-400">Leak Alerts</span><span id="leakCount" class="mono text-red-500 text-xs font-bold">0</span></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Main Table -->
+                <div class="lg:col-span-3 glass-panel rounded-3xl overflow-hidden flex flex-col">
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left">
+                            <thead class="text-slate-500 text-[10px] uppercase bg-slate-900/80">
+                                <tr>
+                                    <th class="px-6 py-4">PID/NAME</th>
+                                    <th class="px-6 py-4">MEMORY (RSS/VIRT)</th>
+                                    <th class="px-6 py-4">TREND</th>
+                                    <th class="px-6 py-4">STATUS</th>
+                                    <th class="px-6 py-4 text-right">ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody id="processList" class="mono text-xs"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: MEMORY MAP (PAGING VISUALIZER) -->
+        <div id="tab-memory-map" class="tab-content">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 glass-panel p-8 rounded-3xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="font-bold text-lg text-blue-400">Physical Page Frames (RAM)</h3>
+                        <div class="flex gap-4 text-[10px] uppercase font-bold">
+                            <div class="flex items-center gap-1"><span class="w-3 h-3 bg-blue-500 rounded-sm"></span> User</div>
+                            <div class="flex items-center gap-1"><span class="w-3 h-3 bg-slate-700 rounded-sm"></span> Kernel</div>
+                            <div class="flex items-center gap-1"><span class="w-3 h-3 bg-red-600 rounded-sm"></span> Leaking</div>
+                        </div>
+                    </div>
+                    <!-- Visual Grid -->
+                    <div id="memoryGrid" class="grid grid-cols-10 sm:grid-cols-20 md:grid-cols-32 gap-1 bg-slate-900 p-4 rounded-xl">
+                        <!-- Cells injected via JS -->
+                    </div>
+                    <p class="mt-6 text-sm text-slate-400 italic">Visualizing address space segmentation. Each block represents a 4KB page frame.</p>
+                </div>
+                <div class="space-y-6">
+                    <div class="glass-panel p-6 rounded-3xl">
+                        <h4 class="font-bold text-amber-400 mb-2">Paging Statistics</h4>
+                        <div class="space-y-4 mt-4">
+                            <div class="text-sm">
+                                <div class="flex justify-between mb-1"><span>Page Hit Ratio</span><span>94.2%</span></div>
+                                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden"><div class="bg-emerald-500 h-full" style="width: 94%"></div></div>
+                            </div>
+                            <div class="text-sm">
+                                <div class="flex justify-between mb-1"><span>Fragmentation</span><span>12.4%</span></div>
+                                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden"><div class="bg-amber-500 h-full" style="width: 12%"></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass-panel p-6 rounded-3xl">
+                        <h4 class="font-bold text-blue-400 mb-2">Translation Lookaside Buffer</h4>
+                        <p class="text-xs text-slate-400 leading-relaxed">The TLB is currently caching 64 virtual-to-physical address mappings. Cache thrashing is currently low.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: REPORTS -->
+        <div id="tab-reports" class="tab-content">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="glass-panel p-8 rounded-3xl">
+                    <h3 class="font-bold text-xl mb-6 text-red-400">Leak Detection Audit</h3>
+                    <div id="reportLogs" class="space-y-4 h-[400px] overflow-y-auto custom-scrollbar pr-4">
+                        <!-- Logs injected by JS -->
+                    </div>
+                </div>
+                <div class="glass-panel p-8 rounded-3xl">
+                    <h3 class="font-bold text-xl mb-6 text-blue-400">OS Concepts Reference</h3>
+                    <div class="space-y-6">
+                        <div>
+                            <h4 class="text-slate-200 font-bold mb-1">Resident Set Size (RSS)</h4>
+                            <p class="text-sm text-slate-400">The portion of memory occupied by a process that is held in main memory (RAM). This is what you see growing in a memory leak.</p>
+                        </div>
+                        <div>
+                            <h4 class="text-slate-200 font-bold mb-1">Virtual Memory</h4>
+                            <p class="text-sm text-slate-400">A memory management technique that provides an "idealized" view of storage to processes, allowing them to use more memory than physically available via swapping.</p>
+                        </div>
+                        <div>
+                            <h4 class="text-slate-200 font-bold mb-1">Slab Allocation</h4>
+                            <p class="text-sm text-slate-400">A kernel memory management mechanism that improves performance by pre-allocating caches for specific object types.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden z-50 p-4">
+        <div class="glass-panel bg-slate-800 p-8 rounded-3xl max-w-sm w-full border border-slate-600 shadow-2xl">
+            <h2 id="modalTitle" class="text-xl font-bold mb-2"></h2>
+            <p id="modalBody" class="text-slate-400 mb-6 text-sm"></p>
+            <button onclick="closeModal()" class="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold transition-all">Dismiss</button>
+        </div>
+    </div>
+
+    <script>
+        // --- GLOBAL STATE ---
+        let activeTab = 'dashboard';
+        let isMonitoring = true;
+        let processes = [
+            { id: 1024, name: "System Kernel", rss: 420, virt: 1200, trend: [], isLeak: false, status: 'stable' },
+            { id: 4521, name: "Node Runtime", rss: 150, virt: 800, trend: [], isLeak: true, status: 'stable' },
+            { id: 882, name: "Graphics Dev", rss: 210, virt: 500, trend: [], isLeak: false, status: 'stable' }
+        ];
+        let historyData = Array(20).fill(0);
+        let chart;
+
+        // --- NAVIGATION ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('active', 'text-blue-500', 'border-blue-500');
+                b.classList.add('text-slate-500', 'border-transparent');
+            });
+
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            const btn = document.getElementById(`btn-${tabId}`);
+            btn.classList.add('active', 'text-blue-500', 'border-blue-500');
+            btn.classList.remove('text-slate-500', 'border-transparent');
+            
+            activeTab = tabId;
+            if(tabId === 'memory-map') renderMemoryGrid();
+        }
+
+        // --- CHART & GRID ---
+        function initChart() {
+            const ctx = document.getElementById('mainChart')?.getContext('2d');
+            if(!ctx) return;
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array(20).fill(''),
+                    datasets: [{
+                        data: historyData,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { min: 0, max: 100, display: false }, x: { display: false } }
+                }
+            });
+        }
+
+        function renderMemoryGrid() {
+            const grid = document.getElementById('memoryGrid');
+            if(!grid) return;
+            grid.innerHTML = '';
+            for(let i=0; i<320; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'memory-cell';
+                // Randomize appearance based on current process states
+                const rand = Math.random();
+                if(rand > 0.8) cell.classList.add('bg-slate-700'); // Kernel
+                else if(rand > 0.4) cell.classList.add('bg-blue-600/60'); // Active
+                else if(processes.some(p => p.status === 'leaking') && rand > 0.3) cell.classList.add('bg-red-600', 'animate-pulse'); // Leaking simulated
+                else cell.classList.add('bg-slate-800'); // Free
+                grid.appendChild(cell);
+            }
+        }
+
+        // --- PROCESS LOGIC ---
+        function addNewProcess() {
+            const name = document.getElementById('newProcName').value || "Task";
+            const rss = parseInt(document.getElementById('newProcRSS').value) || 100;
+            const isLeak = document.getElementById('newProcLeak').value === "true";
+            
+            const newProc = {
+                id: Math.floor(1000 + Math.random() * 8999),
+                name: name,
+                rss: rss,
+                virt: Math.round(rss * 1.5),
+                trend: [],
+                isLeak: isLeak,
+                status: 'stable'
+            };
+
+            processes.push(newProc);
+            addLog(`New process spawned: ${name} (PID ${newProc.id})`, 'info');
+            document.getElementById('newProcName').value = '';
+            document.getElementById('newProcRSS').value = '';
+            updateUI();
+        }
+
+        function killProcess(pid) {
+            processes = processes.filter(p => p.id !== pid);
+            addLog(`Process ${pid} terminated by user. Memory reclaimed.`, 'info');
+            updateUI();
+        }
+
+        function simulationLoop() {
+            if (!isMonitoring) return;
+
+            processes.forEach(proc => {
+                let delta = (Math.random() - 0.5) * 8; 
+                if (proc.isLeak) delta = Math.random() * 35 + 2; 
+
+                proc.rss = Math.max(20, Math.round(proc.rss + delta));
+                proc.virt = Math.max(proc.rss + 40, Math.round(proc.virt + (delta * 0.3)));
+                
+                proc.trend.push(proc.rss);
+                if (proc.trend.length > 10) proc.trend.shift();
+
+                // Detection
+                let consistent = true;
+                for(let i=1; i<proc.trend.length; i++) if(proc.trend[i] <= proc.trend[i-1]) consistent = false;
+                
+                if(consistent && proc.trend.length >= 8 && (proc.trend[proc.trend.length-1] - proc.trend[0] > 100)) {
+                    if(proc.status !== 'leaking') addLog(`[CRITICAL] PID ${proc.id} flagged for memory leak!`, 'error');
+                    proc.status = 'leaking';
+                } else {
+                    proc.status = 'stable';
+                }
+            });
+
+            if(activeTab === 'memory-map' && Math.random() > 0.5) renderMemoryGrid();
+            updateUI();
+        }
+
+        function updateUI() {
+            const list = document.getElementById('processList');
+            if(!list) return;
+
+            const totalMB = processes.reduce((a,b) => a + b.rss, 0);
+            document.getElementById('totalPaging').innerText = (totalMB / 1024).toFixed(2) + " GB";
+            document.getElementById('leakCount').innerText = processes.filter(p => p.status === 'leaking').length;
+
+            list.innerHTML = processes.map(proc => `
+                <tr class="border-b border-white/5 hover:bg-white/5 transition-colors group">
+                    <td class="px-6 py-4">
+                        <div class="font-bold text-slate-200">${proc.name}</div>
+                        <div class="text-[10px] text-slate-500">PID ${proc.id}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="text-blue-400 font-bold">${proc.rss} MB</span>
+                        <span class="text-slate-600 text-[10px] block">VIRT: ${proc.virt} MB</span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="flex gap-0.5 items-end h-8">
+                            ${proc.trend.map(v => `<div class="w-1.5 bg-blue-500/30 rounded-t" style="height: ${Math.min(100, (v/1000)*100)}%"></div>`).join('')}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4">
+                        ${proc.status === 'leaking' ? 
+                            '<span class="bg-red-500/20 text-red-500 text-[9px] px-2 py-0.5 rounded font-black border border-red-500/40 pulse-red">LEAKING</span>' : 
+                            '<span class="bg-emerald-500/20 text-emerald-500 text-[9px] px-2 py-0.5 rounded font-black border border-emerald-500/40">STABLE</span>'}
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="killProcess(${proc.id})" class="opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-500 hover:text-white px-3 py-1 rounded-lg border border-red-500/30 transition-all text-[10px] font-bold">KILL</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function addLog(msg, type) {
+            const container = document.getElementById('reportLogs');
+            if(!container) return;
+            const div = document.createElement('div');
+            div.className = `p-3 rounded-xl border-l-4 ${type === 'error' ? 'bg-red-500/10 border-red-500 text-red-200' : 'bg-slate-800/50 border-blue-500 text-slate-400'} text-xs`;
+            div.innerHTML = `<span class="opacity-30 block text-[9px] mb-1">${new Date().toLocaleTimeString()}</span>${msg}`;
+            container.prepend(div);
+        }
+
+        function toggleMonitoring() {
+            isMonitoring = !isMonitoring;
+            document.getElementById('btnText').innerText = isMonitoring ? "Pause Monitoring" : "Resume Monitoring";
+            document.getElementById('statusIcon').className = `w-2 h-2 rounded-full ${isMonitoring ? 'bg-green-400' : 'bg-slate-500'}`;
+        }
+
+        function resetData() {
+            processes.forEach(p => { p.trend = []; p.rss = 100 + Math.random() * 200; p.status = 'stable'; });
+            addLog("System wide memory cache cleared.", 'info');
+        }
+
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+        window.onload = () => {
+            setInterval(simulationLoop, 2000);
+            updateUI();
+            addLog("Watchdog service started. Kernel version 5.15-MEMGUARD.", 'info');
+        };
+    </script>
+</body>
+</html>
